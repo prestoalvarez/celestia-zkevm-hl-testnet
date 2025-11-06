@@ -40,6 +40,7 @@ pub struct AppContext {
     // reth websocket, for example ws://127.0.0.1:8546
     pub evm_ws: String,
     pub mailbox_address: Address,
+    pub celestia_mailbox_address: String,
     pub merkle_tree_address: Address,
     pub ism_id: String,
 }
@@ -133,11 +134,11 @@ impl HyperlaneMessageProver {
         snapshot_store: Arc<HyperlaneSnapshotStore>,
         proof_store: Arc<dyn ProofStorage>,
         state_query_provider: Arc<dyn StateQueryProvider>,
-    ) -> Result<Arc<Self>> {
+    ) -> Result<Self> {
         let prover = prover_from_env();
         let config = HyperlaneMessageProver::default_config(prover.as_ref());
 
-        Ok(Arc::new(Self {
+        Ok(Self {
             ctx,
             config,
             prover,
@@ -145,7 +146,7 @@ impl HyperlaneMessageProver {
             snapshot_store,
             proof_store,
             state_query_provider,
-        }))
+        })
     }
 
     /// Returns the default prover configuration for the block execution program.
@@ -178,14 +179,13 @@ impl HyperlaneMessageProver {
                 None => message_sync.begin().await,
             };
 
+            let keys: Vec<FixedBytes<32>> = HYPERLANE_MERKLE_TREE_KEYS
+                .iter()
+                .map(|k| FixedBytes::from_hex(k).map_err(|e| anyhow::anyhow!("Failed to parse fixed bytes: {e}")))
+                .collect::<Result<Vec<_>>>()?;
+
             let merkle_proof = evm_provider
-                .get_proof(
-                    self.ctx.merkle_tree_address,
-                    HYPERLANE_MERKLE_TREE_KEYS
-                        .iter()
-                        .map(|k| FixedBytes::from_hex(k).expect("Failed to parse fixed bytes"))
-                        .collect(),
-                )
+                .get_proof(self.ctx.merkle_tree_address, keys)
                 .block_id(committed_height.into())
                 .await?;
 
@@ -218,7 +218,7 @@ impl HyperlaneMessageProver {
     }
 
     async fn run_inner(
-        self: &Arc<Self>,
+        &self,
         evm_provider: &DefaultProvider,
         indexer: &mut HyperlaneIndexer,
         height: u64,
@@ -299,7 +299,7 @@ impl HyperlaneMessageProver {
             let message_hex = alloy::hex::encode(encode_hyperlane_message(&message.message)?);
             let msg = MsgProcessMessage::new(
                 // Celestia mailbox id, todo: add to config
-                "0x68797065726c616e650000000000000000000000000000000000000000000000".to_string(),
+                self.ctx.celestia_mailbox_address.clone(),
                 ism_client.signer_address().to_string(),
                 alloy::hex::encode(vec![]), // empty metadata; messages are pre-authorized before submission
                 message_hex,

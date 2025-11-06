@@ -190,7 +190,7 @@ impl EvCombinedProver {
     }
 
     /// Starts the batched prover loop.
-    pub async fn run(self, message_sync: Arc<MessageProofSync>) -> Result<()> {
+    pub async fn run(self: Arc<Self>, message_sync: Arc<MessageProofSync>) -> Result<()> {
         let mut batch_size = BATCH_SIZE;
         let mut scan_head: Option<u64> = None;
         let mut poll = interval(Duration::from_secs(6)); // BlockTime=6s
@@ -205,7 +205,7 @@ impl EvCombinedProver {
                 scan_head = Some(status.trusted_celestia_height + 1);
             }
 
-            let scan_start = scan_head.unwrap();
+            let scan_start = scan_head.ok_or_else(|| anyhow!("Scan head is not set"))?;
             if scan_start < status.celestia_head {
                 batch_size = self
                     .calculate_batch_size(
