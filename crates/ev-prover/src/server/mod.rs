@@ -8,6 +8,7 @@ use ev_state_queries::MockStateQueryProvider;
 use ev_types::v1::get_block_request::Identifier;
 use ev_types::v1::store_service_client::StoreServiceClient;
 use ev_types::v1::GetBlockRequest;
+use ev_zkevm_types::programs::block::State;
 use storage::hyperlane::message::HyperlaneMessageStore;
 use storage::hyperlane::snapshot::HyperlaneSnapshotStore;
 use storage::proofs::RocksDbProofStorage;
@@ -388,5 +389,9 @@ pub async fn get_trusted_state(client: &CelestiaIsmClient) -> Result<TrustedStat
 
     let ism = resp.ism.unwrap();
 
-    Ok(TrustedState::new(ism.height, FixedBytes::from_slice(&ism.state_root)))
+    let state: State = bincode::deserialize(&ism.state).unwrap();
+    Ok(TrustedState::new(
+        state.height,
+        FixedBytes::from_slice(&state.state_root),
+    ))
 }

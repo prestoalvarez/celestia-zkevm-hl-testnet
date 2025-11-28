@@ -11,14 +11,14 @@ use alloy_primitives::FixedBytes;
 use alloy_provider::Provider;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use celestia_grpc_client::{MsgUpdateZkExecutionIsm, QueryIsmRequest};
+use celestia_grpc_client::{MsgUpdateInterchainSecurityModule, QueryIsmRequest};
 use celestia_rpc::{BlobClient, HeaderClient, ShareClient};
 use celestia_types::{
     nmt::{Namespace, NamespaceProof},
     Blob,
 };
 use ev_types::v1::SignedData;
-use ev_zkevm_types::programs::block::{BatchExecInput, BlockExecInput, BlockRangeExecOutput};
+use ev_zkevm_types::programs::block::{BatchExecInput, BlockExecInput, BlockRangeExecOutput, State};
 use prost::Message;
 use rsp_client_executor::io::EthClientExecutorInput;
 use sp1_sdk::{include_elf, SP1ProofMode, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin, SP1VerifyingKey};
@@ -202,7 +202,7 @@ impl BatchExecProver {
             info!("Proof generation time: {}", start_time.elapsed().as_millis());
 
             // Index if new ev blocks were included.
-            self.index_messages(status.trusted_height + 1, output.new_height)
+            self.index_messages(status.trusted_height + 1, output.new_state.height)
                 .await?;
 
             if let Err(e) = self.submit_proof_msg(&proof).await {
@@ -214,7 +214,7 @@ impl BatchExecProver {
             scan_head = Some(status.celestia_head + 1);
 
             let permit = message_sync.begin().await;
-            let commit = RangeProofCommitted::new(output.new_height, output.new_state_root);
+            let commit = RangeProofCommitted::new(output.new_state.height, output.new_state.state_root);
             let request = MessageProofRequest::with_permit(commit, permit);
             self.range_tx.send(request).await?;
         }
@@ -231,13 +231,14 @@ impl BatchExecProver {
             })
             .await?;
         let ism = resp.ism.ok_or_else(|| anyhow!("ZKISM not found"))?;
-        let trusted_root = FixedBytes::from_slice(&ism.state_root);
+        let state: State = bincode::deserialize(&ism.state).unwrap();
+        let trusted_root = FixedBytes::from_slice(&state.state_root);
         let celestia_head = self.ctx.celestia_client().header_local_head().await?.height().value();
 
         Ok(ProverStatus {
-            trusted_height: ism.height,
+            trusted_height: state.height,
             trusted_root,
-            trusted_celestia_height: ism.celestia_height,
+            trusted_celestia_height: state.celestia_height,
             celestia_head,
         })
     }
@@ -307,7 +308,7 @@ impl BatchExecProver {
         let public_values = proof.public_values.as_slice().to_vec();
         let signer = self.ctx.ism_client().signer_address().to_string();
 
-        let msg = MsgUpdateZkExecutionIsm::new(id, proof.bytes(), public_values, signer);
+        let msg = MsgUpdateInterchainSecurityModule::new(id, proof.bytes(), public_values, signer);
 
         info!("Updating ZKISM on Celestia...");
         let response = self.ctx.ism_client().send_tx(msg).await?;

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use alloy_provider::Provider;
 use alloy_rpc_types::{BlockId, BlockNumberOrTag};
 use anyhow::Result;
-use celestia_grpc_client::proto::celestia::zkism::v1::MsgCreateZkExecutionIsm;
+use celestia_grpc_client::proto::celestia::zkism::v1::MsgCreateInterchainSecurityModule;
 use celestia_grpc_client::proto::hyperlane::warp::v1::MsgSetToken;
 use celestia_grpc_client::types::ClientConfig;
 use celestia_grpc_client::CelestiaIsmClient;
@@ -23,6 +23,7 @@ use crate::prover::chain::ChainContext;
 use crate::prover::programs::batch::BATCH_ELF;
 use crate::prover::programs::message::EV_HYPERLANE_ELF;
 use crate::server::start_server;
+use ev_zkevm_types::programs::block::State;
 use storage::proofs::{ProofStorage, RocksDbProofStorage};
 
 pub mod cli;
@@ -90,14 +91,18 @@ pub async fn create_ism() -> Result<()> {
     let groth16_vkey = Config::groth16_vkey();
     let (state_transition_vkey, state_membership_vkey) = setup_state_vkeys();
 
-    let create_message = MsgCreateZkExecutionIsm {
-        creator: ism_client.signer_address().to_string(),
-        state_root: ev_state_root.to_vec(),
-        height: ev_block_height,
-        celestia_header_hash: block_hash,
+    let initial_state = State {
+        state_root: ev_state_root.0,
+        celestia_header_hash: block_hash.try_into().unwrap(),
         celestia_height: height,
-        namespace: namespace.as_bytes().to_vec(),
-        sequencer_public_key: pub_key,
+        height: ev_block_height,
+        namespace: namespace.as_bytes().try_into().unwrap(),
+        public_key: pub_key.try_into().unwrap(),
+    };
+
+    let create_message = MsgCreateInterchainSecurityModule {
+        creator: ism_client.signer_address().to_string(),
+        state: bincode::serialize(&initial_state)?,
         groth16_vkey,
         state_transition_vkey,
         state_membership_vkey,
