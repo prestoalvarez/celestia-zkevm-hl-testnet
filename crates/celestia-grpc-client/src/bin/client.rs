@@ -39,9 +39,6 @@ enum Commands {
         /// Public values file path (hex encoded)
         #[arg(long)]
         public_values_file: String,
-        /// Block height for inclusion proof
-        #[arg(long)]
-        height: u64,
     },
     Transfer {
         /// The sender address (must be the tx signer)
@@ -109,7 +106,6 @@ async fn main() -> Result<()> {
             id,
             proof_file,
             public_values_file,
-            height,
         } => {
             info!("Submitting state inclusion proof (MsgSubmitMessages)...");
 
@@ -117,7 +113,7 @@ async fn main() -> Result<()> {
             let public_values = read_hex_file(public_values_file)?;
             let signer_address = client.signer_address().to_string();
 
-            let proof_msg = StateInclusionProofMsg::new(id.clone(), *height, proof, public_values, signer_address);
+            let proof_msg = StateInclusionProofMsg::new(id.clone(), proof, public_values, signer_address);
 
             let response = client.send_tx(proof_msg).await?;
             println!("State inclusion proof submitted successfully!");
