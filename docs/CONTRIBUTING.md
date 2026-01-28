@@ -1,6 +1,6 @@
 # Contributing
 
-hank you for your interest in contributing to the repository! 🎉
+Thank you for your interest in contributing to the repository! 🎉
 We welcome all contributions, whether it's fixing bugs, improving documentation, or implementing new features.
 
 ## Getting Started
